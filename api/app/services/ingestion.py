@@ -1,52 +1,52 @@
-#Indexing
-#1: Load, 2: Chunks, 3: Embed, 4: Store
-
-# from pypdf import PdfReader
-from langchain_core.documents import Document
-
-#import re   #add this in v6
-
 from pathlib import Path
+import re
+
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_core.documents.base import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_qdrant import QdrantVectorStore
-from qdrant_client.models import Distance, VectorParams
+from langchain_qdrant import QdrantVectorStore, RetrievalMode, FastEmbedSparse
+from qdrant_client.models import Distance, VectorParams, SparseVectorParams
 
 from app.core.config import get_settings, get_embeddings, get_qdrant_client
 
-#STAFF_ONLY= re.compile(pattern=r"\n?\d+\.[^\n]*\(staff only\).*?(?=\n\d+\. |\Z)", flags=re.S)
+
+STAFF_ONLY = re.compile(
+    r"^[ \t]*\d+\.\s*[^\n]*\(\s*staff\s+only\s*\)[^\n]*\n.*?(?=^[ \t]*\d+\.\s|\Z)",
+    re.IGNORECASE | re.MULTILINE | re.DOTALL
+)
 
 def load(path: Path) -> list[Document]:
-    #for doc in docs:
-        #doc.page_content = STAFF_ONLY.sub("", doc.page_content)  #remove staff only content
-    #return docs
-    return PyPDFLoader(file_path=path).load()     #PyPDF List of documents bnata hai
+    docs = PyPDFLoader(path).load()
 
-def ingest() -> int:
+    for doc in docs:
+        doc.page_content = STAFF_ONLY.sub("", doc.page_content)
+
+    return docs
+
+# def load(path: str) -> list[Document]:
+#      return PyPDFLoader(file_path=str(path)).load()
+
+def ingest():
     settings = get_settings()
 
-    #1: Load
+    # 1. Load
     file = Path(settings.data_path)
-    if not file.exists():
-        raise FileNotFoundError(f"File not found: {file}")
     docs = load(path=file)
 
-    #2: Chunks
+    # 2. Chunks
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size = settings.chunk_size,
-        chunk_overlap = settings.chunk_overlap,
-        separators = ["\n\n", "\n", " ", ""]
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
+        separators=["\n\n", "\n", " ", ""]
     )
 
-    chunks = splitter.split_documents(docs)
+    chunks = splitter.split_documents(documents=docs)
 
-    #3: Embed
+    # 3. Embed
     embed = get_embeddings(settings)
 
-    #4: Store
+    # 4. Qdrant
     client = get_qdrant_client(settings)
-        # path= settings.qdrant_path
-        # )
 
     try:
         if client.collection_exists(collection_name=settings.collection):
@@ -54,32 +54,27 @@ def ingest() -> int:
 
         client.create_collection(
             collection_name=settings.collection,
-            vectors_config=VectorParams(
-                size=settings.embed_dim,
-                distance=Distance.COSINE
-            )
+            vectors_config={"dense": VectorParams(size=settings.embeded_dim, distance=Distance.COSINE)},
+            sparse_vectors_config={"sparse": SparseVectorParams()}
         )
 
         vector_store = QdrantVectorStore(
             client=client,
             collection_name=settings.collection,
-            embedding=embed
+            embedding=embed,
+            sparse_embedding=FastEmbedSparse(model_name="Qdrant/bm25"),
+            # retrieval_mode=RetrievalMode.DENSE,
+            retrieval_mode=RetrievalMode.HYBRID,
+            vector_name="dense",
+            sparse_vector_name="sparse"
         )
-
         vector_store.add_documents(chunks)
-        print(f"Successfully indexed {len(chunks)} chunks.")
 
-        count = client.count(
-            collection_name = settings.collection,
-            exact = True
-        ).count
-
-    # except:
-    #     pass
     finally:
         client.close()
 
     return len(chunks)
 
 if __name__ == "__main__":
-    print(ingest(), "chunk indexed!")
+    # ingest()
+    print(ingest(), "chunks indexed")

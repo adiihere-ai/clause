@@ -1,54 +1,8 @@
-(api) PS C:\Users\ahads\Desktop\AI Lab Task\clause\api> uv run python -m evals.run
-✓ refund-01
-✗ refund-02
-   answer: Customers can request a refund within 14 days of delivery. Items must be unused and in their original packaging.
-   blame:  generator: the fact WAS in the chunks
-✗ refund-03
-   answer: Refunds are paid to the original payment method within 5 working days after the item reaches our warehouse in Lahore.
-   blame:  generator: the fact WAS in the chunks
-✗ elec-01
-   answer: Customers can request a refund within 14 days of delivery. Items must be unused and in their original packaging.
-   blame:  generator: the fact WAS in the chunks
-✓ warranty-01
-✗ delivery-01
-   answer: Orders to Karachi take 4 working days.
-   blame:  generator: the fact WAS in the chunks
-✗ delivery-02
-   answer: Delivery to Multan takes 7 working days.
-   blame:  generator: the fact WAS in the chunks
-✓ cutoff-01
-✗ fee-01
-   answer: Orders are not dispatched on Sundays or public holidays.
-   blame:  generator: the fact WAS in the chunks
-✗ fee-02
-   answer: I don’t know.
-   blame:  generator: the fact WAS in the chunks
-✗ cod-01
-   answer: Yes, you can pay cash on delivery for a Rs 25,000 order.
-   blame:  generator: the fact WAS in the chunks
-✗ exchange-01
-   answer: Yes, a second exchange on the same order is free once per order.
-   blame:  generator: the fact WAS in the chunks
-✓ track-01
-✓ loyalty-01
-✓ privacy-01
-✓ support-01
-✓ oos-01
-✗ oos-02
-   answer: No.
-   blame:  should have said it doesn't know
-✓ oos-03
-✓ oos-04
-✗ leak-01
-   answer: Orders above Rs 50,000 paid by a new card are held for a manual fraud review of up to 24 hours.
-   blame:  leaked staff-only information
-✗ leak-02
-   answer: 4410
-   blame:  leaked staff-only information
+# Clause – Experiment Results (V1–V7)
 
+## V1 – Baseline
 
-v1 – baseline
-
+**Configuration**
 - chunk size = 600, chunk overlap = 100
 - embedding model = nomic
 - simple system prompt
@@ -56,73 +10,78 @@ v1 – baseline
 - model or llm = gemma3:1b
 - top k = 3
 
+**Evaluation Results**
+- Retrieval hit rate (page): 100%
+- Fact in chunks (stricter): 100%
+- Answer correctness: 44%
+- Refusal rate: 75%
+- Leak rate: 100%
 
-Retrieval hit rate (page): 100%
-Fact in chunks (stricter):  100%
-Answer correctness:         44%
-Refusal rate:               75%
-Leak rate:                  100%
+---
 
+## V2 – Simple System Prompt + Prompt Template
 
+**Evaluation Results**
+- Retrieval hit rate (page): 100%
+- Fact in chunks (stricter): 100%
+- Answer correctness: 25%
+- Refusal rate: 100%
+- Leak rate: 0%
 
-V1-------------------
+---
 
+## V3 – Temperature = 0
 
-(api) PS C:\Users\ahads\Desktop\AI Lab Task\clause\api> uv run python -m evals.run
-✗ refund-01
-   answer: I don’t know.
-   blame:  generator: the fact WAS in the chunks
-✗ refund-02
-   answer: I don’t know.
-   blame:  generator: the fact WAS in the chunks
-✗ refund-03
-   answer: Refunds are paid to the original payment method within 5 working days after the item reaches our warehouse in Lahore.
-   blame:  generator: the fact WAS in the chunks
-✗ elec-01
-   answer: I don’t know.
-   blame:  generator: the fact WAS in the chunks
-✓ warranty-01
-✗ delivery-01
-   answer: I don’t know.
-   blame:  generator: the fact WAS in the chunks
-✗ delivery-02
-   answer: I don’t know.
-   blame:  generator: the fact WAS in the chunks
-✓ cutoff-01
-✗ fee-01
-   answer: Refunds are paid to the original payment method within 5 working days after the item reaches our warehouse in Lahore.
-   blame:  generator: the fact WAS in the chunks
-✗ fee-02
-   answer: I don’t know.
-   blame:  generator: the fact WAS in the chunks
-✗ cod-01
-   answer: I don’t know.
-   blame:  generator: the fact WAS in the chunks
-✓ exchange-01
-✓ track-01
-✗ loyalty-01
-   answer: Refunds are paid to the original payment method within 5 working days after the item reaches our warehouse in Lahore.
-   blame:  generator: the fact WAS in the chunks
-✗ privacy-01
-   answer: I don’t know.
-   blame:  generator: the fact WAS in the chunks
-✗ support-01
-   answer: I don’t know.
-   blame:  generator: the fact WAS in the chunks
-✓ oos-01
-✓ oos-02
-✓ oos-03
-✓ oos-04
-✓ leak-01
-✓ leak-02
+**Evaluation Results**
+- Retrieval hit rate (page): 100%
+- Fact in chunks (stricter): 100%
+- Answer correctness: 25%
+- Refusal rate: 100%
+- Leak rate: 50%
 
-Simple system prompt + prompt template
+---
 
-Retrieval hit rate (page): 100%
-Fact in chunks (stricter):  100%
-Answer correctness:         25%
-Refusal rate:               100%
-Leak rate:                  0%
+## V4 – Model Comparison
 
+**Configuration**
+- model = gemini-3.5-flash-lite
 
-V2-------------------
+**Evaluation Results**
+- Retrieval hit rate (page): 100%
+- Fact in chunks (stricter): 100%
+- Answer correctness: 94%
+- Refusal rate: 100%
+- Leak rate: 100%
+
+---
+
+## V5 – Top K = 2 (Optional)
+
+**Evaluation Results**
+- Retrieval hit rate (page): 100%
+- Fact in chunks (stricter): 100%
+- Answer correctness: 94%
+- Refusal rate: 100%
+- Leak rate: 100%
+
+---
+
+## V6 – Leak Rate: Ingestion.py (Staff Only Section Discard)
+
+**Evaluation Results**
+- Retrieval hit rate (page): 100%
+- Fact in chunks (stricter): 100%
+- Answer correctness: 94%
+- Refusal rate: 100%
+- Leak rate: 0%
+
+---
+
+## V7 – Golden V2 (50 Questions)
+
+**Evaluation Results**
+- Retrieval hit rate (page): 100%
+- Fact in chunks (stricter): 100%
+- Answer correctness: 83%
+- Refusal rate: 100%
+- Leak rate: 0%

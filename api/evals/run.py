@@ -3,7 +3,7 @@ from app.services.chat import RAGService
 
 
 REFUSALS = ["don't know", "do not know", "not mention", "doesn't mention",
-            "doesn't cover", "does not cover", "no information", "not as per the context"]
+            "doesn't cover", "does not cover", "no information"]
 
 def clean(text):
     return text.lower().replace(",", "").replace("’", "'")
@@ -11,14 +11,14 @@ def clean(text):
 
 def has(text, word):
     # "a|b" means a or b
-    return any(clean(option) in text for option in word.split("|"))
+    return any(option in text for option in word.split("|"))
 
 
 def pct(results):
     return f"{sum(results) / len(results):.0%}" if results else "n/a"
 
 
-tests = [json.loads(line) for line in open("evals/golden.jsonl", encoding="utf-8") if line.strip()]
+tests = [json.loads(line) for line in open("evals/golden_v2.jsonl") if line.strip()]
 rag = RAGService()
 hits, fact_found, correct, refused, leaked = [], [], [], [], []
 
@@ -28,7 +28,8 @@ for t in tests:
 
     if t["type"] == "answerable":
         # What did the librarian actually hand the writer?
-        context = clean(" ".join(s.content for s in result.sources))
+        chunks = rag.store.similarity_search(t["question"], k=rag.settings.top_k)
+        context = clean(" ".join(c.page_content for c in chunks))
 
         found = all(has(context, w) for w in t["must_include"])
         ok = all(has(answer, w) for w in t["must_include"])
