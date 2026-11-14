@@ -1,57 +1,107 @@
 # Clause — AI-Powered Shop Assistant
 
-Clause is a handbook-grounded customer-support assistant built with Retrieval-Augmented Generation (RAG). It answers shop-policy questions using information retrieved from a shop handbook and is designed to refuse questions that cannot be supported by the available handbook content.
+**Clause** is a Retrieval-Augmented Generation (RAG) project that explores how an AI assistant can answer customer-support questions from an approved shop handbook instead of relying on unsupported general knowledge.
 
-The project explores how retrieval settings, prompts, model configuration, and hybrid retrieval affect answer quality and safe refusal behaviour.
+The project focuses on three connected goals:
 
-> **Project status:** The repository documentation and evaluation plan are being assembled. Historical experiment results are labelled as historical; experiments without verified terminal output are not presented as completed.
+1. **Grounded answers** — retrieve relevant handbook passages and use them as the evidence for customer-facing answers.
+2. **Reliable abstention** — say when the available handbook evidence does not support an answer.
+3. **Information protection** — keep internal, staff-only material out of the customer-facing knowledge index before it is embedded.
 
-## Project goals
+> **Project stage:** This repository is being assembled as a reproducible project and experiment record. The documentation and evaluation datasets are published, but the complete runnable backend, final evaluation outputs, and workbook must be checked in before this repository can be described as a fully reproducible release. Historical results below are clearly labelled and are not represented as fresh runs.
 
-- Answer customer questions using handbook evidence rather than unsupported model knowledge.
-- Retrieve relevant handbook passages from a Qdrant vector store.
-- Return source information with answers where available.
-- Refuse out-of-scope questions when the handbook does not contain the answer.
-- Prevent staff-only handbook material from entering the customer-facing retrieval index.
-- Evaluate answer correctness, retrieval behaviour, refusal behaviour, and restricted-information leakage.
+---
 
-## Architecture at a glance
+## Contents
 
-The backend is organized under `api/` and uses Python, FastAPI, LangChain, and Qdrant.
+- [Why Clause?](#why-clause)
+- [How it works](#how-it-works)
+- [Architecture](#architecture)
+- [Technology](#technology)
+- [Repository structure](#repository-structure)
+- [Evaluation design](#evaluation-design)
+- [V1–V7 experiment plan](#v1v7-experiment-plan)
+- [Historical results currently available](#historical-results-currently-available)
+- [Security and privacy](#security-and-privacy)
+- [Reproducibility](#reproducibility)
+- [Current limitations and next steps](#current-limitations-and-next-steps)
+- [Project documentation](#project-documentation)
+- [License](#license)
 
-1. **Configuration** — `api/app/core/config.py` loads application and model settings.
-2. **Ingestion** — `api/app/services/ingestion.py` loads the handbook, prepares document chunks, creates embeddings, and indexes them.
-3. **Retrieval** — `api/app/services/retrieval.py` contains retrieval-related functionality.
-4. **Answer generation** — `api/app/services/chat.py` combines the question and retrieved evidence and generates the response.
-5. **API and CLI** — `api/app/main.py` exposes the API; `api/app/cli.py` provides a command-line entry point.
-6. **Evaluation** — `api/evals/run.py` runs the golden question sets and reports evaluation outcomes.
+## Why Clause?
 
-The intended request flow is:
+A general-purpose language model may produce a confident answer even when a shop's policy does not support it. In customer support, that can lead to incorrect promises about refunds, delivery, warranties, payments, or account information.
 
-```text
-Customer question
-       |
-       v
-Question validation
-       |
-       v
-Retrieve handbook passages from Qdrant
-       |
-       v
-Relevance / evidence check
-       |
-       +---- insufficient evidence ----> Safe refusal
-       |
-       v
-Generate an answer grounded in retrieved passages
-       |
-       v
-Answer and source information
+Clause uses a shop handbook as its knowledge source. It is designed to retrieve relevant policy text, answer only when adequate evidence is available, and abstain when the evidence is missing or insufficient.
+
+The project also treats data handling as part of the system design: internal operational instructions must be filtered out before the customer-facing retrieval index is created. A prompt telling the model not to reveal information is not a substitute for excluding that information from the index.
+
+## How it works
+
+The intended question-answering flow is:
+
+```mermaid
+flowchart TD
+    A[Customer question] --> B[Validate question]
+    B --> C[Retrieve handbook passages]
+    C --> D{Relevant evidence available?}
+    D -- No --> E[Return safe refusal]
+    D -- Yes --> F[Generate answer from evidence]
+    F --> G[Return answer and source details]
 ```
 
-See [the architecture notes](docs/architecture.md) for more detail.
+The knowledge-preparation flow is:
 
-## Repository layout
+```mermaid
+flowchart TD
+    A[Approved handbook PDF] --> B[Extract page text]
+    B --> C[Remove staff-only content]
+    C --> D[Split into text chunks]
+    D --> E[Create embeddings]
+    E --> F[Store searchable vectors in Qdrant]
+    F --> G[Inspect and validate indexed content]
+```
+
+**Important security boundary:** filtering internal content must happen before chunking and embedding. Refusal tests are useful, but they do not prove that sensitive text is absent from the vector store.
+
+## Architecture
+
+The project architecture is organized around these responsibilities:
+
+| Layer | Responsibility |
+|---|---|
+| Configuration | Loads model, embedding, chunking, retrieval, and vector-store settings from environment variables. |
+| Ingestion | Extracts handbook text, excludes unauthorized content, creates chunks and embeddings, and indexes approved content. |
+| Vector store | Stores the indexed handbook content for semantic and/or hybrid retrieval. |
+| Retrieval | Finds relevant handbook passages for a customer question and applies the configured relevance rules. |
+| Answer generation | Uses the question and retrieved evidence to generate a concise, grounded response or abstention. |
+| API / CLI | Provides interfaces for asking questions and operating the application. |
+| Evaluation | Runs labelled questions and records retrieval, answer, refusal, and restricted-information outcomes. |
+
+The project history includes an earlier dense-retrieval design and a later hybrid dense/sparse retrieval implementation. The precise behaviour of an experiment must be read together with the code revision and configuration used for that run; settings from one version must not be assumed to apply to every version.
+
+See [docs/architecture.md](docs/architecture.md) for the component-level design and operational notes.
+
+## Technology
+
+The project configuration and architecture records identify the following technologies:
+
+| Technology | Role |
+|---|---|
+| Python 3.13 | Backend language |
+| [uv](https://docs.astral.sh/uv/) | Python environment and dependency management |
+| [FastAPI](https://fastapi.tiangolo.com/) | Backend API framework |
+| [LangChain](https://www.langchain.com/) | Model, embedding, and retrieval integrations |
+| [Qdrant](https://qdrant.tech/) | Vector database |
+| Ollama | Local model / embedding provider option |
+| Google GenAI | Hosted chat-model provider option in the shared configuration |
+| JSONL | Golden evaluation datasets |
+
+Model names, providers, vector dimensions, and retrieval parameters are configuration-dependent. Refer to the checked-in environment template and the matching experiment record rather than assuming one model configuration is universal.
+
+## Repository structure
+
+The repository is being organized as follows. The tree distinguishes the intended project layout from files that must still be added or verified.
 
 ```text
 clause/
@@ -60,6 +110,7 @@ clause/
 ├── api/
 │   ├── app/
 │   │   ├── core/
+│   │   │   └── config.py
 │   │   ├── schemas/
 │   │   ├── services/
 │   │   ├── cli.py
@@ -67,110 +118,167 @@ clause/
 │   ├── evals/
 │   │   ├── golden.jsonl
 │   │   ├── golden_v2.jsonl
-│   │   └── run.py
-│   ├── files/                 # Local source documents; publish only sanitized data
+│   │   ├── run.py
+│   │   └── results/
+│   │       ├── results.txt
+│   │       └── evaluation_results.xlsx
 │   ├── .env.example
 │   ├── pyproject.toml
 │   └── uv.lock
 ├── docs/
 │   ├── architecture.md
 │   └── experiments.md
-└── web/                       # Frontend directory; document its implementation as it is finalized
+└── web/
 ```
 
-Generated vector databases, virtual environments, caches, and secrets should remain local and are excluded by `.gitignore`.
+The evaluation result files and some application files shown in this target structure are planned deliverables; their presence should be verified in the repository before treating the tree as a complete inventory.
 
-## Technology
+## Evaluation design
 
-The shared project configuration and architecture notes identify the following technologies:
+Clause uses labelled JSON Lines (JSONL) datasets. Each line represents one test case.
 
-- Python 3.13
-- FastAPI
-- LangChain
-- Qdrant
-- Dense embeddings and sparse retrieval components in the newer hybrid-retrieval implementation
-- Ollama and/or a configured hosted chat-model provider
-- `uv` for Python dependency and environment management
-
-Exact model/provider settings are controlled by the environment configuration. Use `api/.env.example` as the template and check it against `api/app/core/config.py` before running the project.
-
-## Setup
-
-The commands below assume that the backend project is in `api/`.
-
-1. Install Python 3.13 and [uv](https://docs.astral.sh/uv/).
-2. Open a terminal in the `api/` directory.
-3. Create your local environment file from the example:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-   On Windows PowerShell:
-
-   ```powershell
-   Copy-Item .env.example .env
-   ```
-
-4. Add the credentials and model settings required by your selected provider to `.env`. Never commit this file.
-5. Install the locked dependencies:
-
-   ```bash
-   uv sync --locked
-   ```
-
-6. Make sure the configured embedding and chat models are available. For Ollama-based models, install/start Ollama and pull the model names configured in your environment.
-7. Follow the commands exposed by the current CLI and ingestion modules to build the local index before starting the API.
-
-> The exact CLI subcommands and ingestion invocation must be confirmed against the current source files before being treated as definitive. This README intentionally does not invent command names.
-
-## API
-
-The project architecture describes a FastAPI service with a health route and a question-answering route:
-
-- `GET /` — health/status endpoint.
-- `POST /ask` — submits a customer question and returns an answer with source information.
-
-Open the FastAPI Swagger UI at `/docs` after starting the backend to inspect the exact request and response schemas implemented by the current code.
-
-## Evaluation
-
-Two golden datasets are present in the project:
-
-| Dataset | Cases | Answerable | Out of scope | Restricted |
+| Dataset | Total cases | Answerable | Out of scope | Restricted |
 |---|---:|---:|---:|---:|
 | `golden.jsonl` | 22 | 16 | 4 | 2 |
 | `golden_v2.jsonl` | 49 | 35 | 9 | 5 |
 
-The datasets are different in size and composition. Their raw pass percentages should not be compared as if they were identical test sets.
+### Case categories
 
-The evaluation plan contains seven versions, V1–V7. The historical results and the intended change in each version are documented in [docs/experiments.md](docs/experiments.md). Results for any run must be supported by its actual terminal output or saved report.
+- **answerable** — the handbook contains the information needed to answer the question.
+- **out_of_scope** — the handbook does not provide the requested information; the assistant should abstain.
+- **restricted** — the question tests whether staff-only or otherwise prohibited information is exposed.
 
-## Security and data handling
+### Metrics
 
-The handbook contains material intended for staff as well as customer-facing policy information. **Staff-only content must be excluded before documents are chunked and embedded.** A prompt instruction alone is not an access-control boundary.
+Report both the raw count and the denominator alongside every percentage.
 
-Before publishing or deploying:
+| Metric | What it measures |
+|---|---|
+| Retrieval / page hit rate | Answerable cases where a retrieved source matches an expected handbook page. |
+| Evidence present in retrieved chunks | Answerable cases where the required supporting fact is present in the retrieved text. |
+| Answer correctness | Answerable cases whose response satisfies the expected answer criteria. |
+| Out-of-scope refusal rate | Out-of-scope cases correctly refused. |
+| Restricted-information leak rate | Restricted cases whose response contains prohibited information. |
 
-- Do not commit `.env`, API keys, tokens, or other credentials.
-- Do not commit local Qdrant/vector-store data.
-- Do not publish an unredacted handbook containing staff-only material.
-- Verify the ingested chunks/index contain no staff-only content.
-- Keep restricted evaluation questions and expected leak terms safe to publish only after checking that they do not disclose confidential policy details.
-- Rebuild and validate the index after changing the ingestion filter.
+These metrics measure different stages. For example, retrieving the correct page does not guarantee that the model will formulate the correct answer. Likewise, a refusal test does not establish that sensitive content was removed from the underlying index.
 
-## Limitations
+**Dataset comparison caution:** `golden.jsonl` and `golden_v2.jsonl` have different sizes and category distributions. Their overall pass percentages are not directly comparable without explaining the dataset and denominator differences.
 
-- RAG answers depend on the quality and coverage of the handbook and retrieval results.
-- A correct passage being retrieved does not guarantee that the language model will produce a correct answer.
-- Evaluation matching based on required keywords is an approximation, not a complete semantic correctness measure.
-- Results from different golden datasets are not directly comparable without accounting for their different case composition.
-- Model/provider settings, thresholds, and retrieval strategy must be recorded for each experiment.
+## V1–V7 experiment plan
 
-## Experiments and results
+The experiment series studies the effect of prompting, generation settings, model selection, retrieval depth, ingestion-time filtering, and hybrid retrieval.
 
-See [docs/experiments.md](docs/experiments.md) for the V1–V7 plan, known historical results, metrics, and reproduction requirements.
+| Version | Change under study | Dataset |
+|---|---|---|
+| V1 | Original baseline | `golden.jsonl` |
+| V2 | Simple system prompt and prompt template | `golden.jsonl` |
+| V3 | Temperature set to 0 | `golden.jsonl` |
+| V4 | Chat-model comparison | `golden.jsonl` |
+| V5 | Top-k set to 2 | `golden.jsonl` |
+| V6 | Remove staff-only section during ingestion | `golden.jsonl` |
+| V7 | Final hybrid RAG implementation | `golden_v2.jsonl` |
+
+For V3–V6, the intended methodology is to change the named factor while keeping other settings stable where possible. Any additional changes must be recorded so that the effect of an experiment is not misattributed.
+
+See [docs/experiments.md](docs/experiments.md) for the detailed plan, metric definitions, historical observations, and reproduction checklist.
+
+## Historical results currently available
+
+The following values were shared as historical experiment results during development. They are included for transparency; they are **not newly executed results from the current GitHub repository**.
+
+### V1 — Original baseline
+
+Dataset: `golden.jsonl` (22 cases).
+
+| Metric | Historical result |
+|---|---:|
+| Retrieval / page hit rate | 100% |
+| Evidence present in chunks | 100% |
+| Answer correctness | 44% |
+| Out-of-scope refusal rate | 75% |
+| Restricted-information leak rate | 100% |
+
+**Observation:** the historical run retrieved the expected page and supporting facts, but answer generation was frequently incorrect. Both restricted test cases exposed internal-only information.
+
+### V2 — Prompt and template change
+
+Dataset: `golden.jsonl` (22 cases).
+
+| Metric | Historical result |
+|---|---:|
+| Retrieval / page hit rate | 100% |
+| Evidence present in chunks | 100% |
+| Answer correctness | 25% |
+| Out-of-scope refusal rate | 100% |
+| Restricted-information leak rate | 0% |
+
+**Observation:** the stricter prompt improved the observed refusal and leakage results, but answer correctness decreased compared with V1. This illustrates why safety and answer quality must be measured separately.
+
+### Earlier V7 architecture snapshot — not the final V7 evaluation
+
+A previously shared architecture report records **9/22 passed** on the 22-case dataset:
+
+| Metric | Earlier reported result |
+|---|---:|
+| Retrieval hit rate | 100% |
+| Evidence present in chunks | 100% |
+| Answer correctness | 18.8% (3/16) |
+| Out-of-scope refusal rate | 100% (4/4) |
+| Restricted-information leak rate | 0% (0/2) |
+
+This is an earlier architecture snapshot using the 22-case dataset. It is **not** the final V7 result, because the final experiment plan assigns V7 to the expanded 49-case `golden_v2.jsonl` dataset. The earlier report also recorded implementation/evaluation caveats, including a diagnostic retrieval path that did not apply the same threshold as the live path.
+
+V3–V6 and the final 49-case V7 run should only be reported after their matching code/configuration and complete outputs have been verified.
+
+## Security and privacy
+
+The handbook used during development contains customer-facing content and a staff-only section. Protecting that material is a core system requirement.
+
+- Exclude staff-only content **before chunking, embedding, and indexing**.
+- Treat prompt instructions as behaviour guidance, not as an authorization boundary.
+- Inspect extracted text and indexed chunks to confirm that restricted material is absent.
+- Do not publish the original handbook if it contains internal or confidential information.
+- Never commit `.env`, API keys, access tokens, or other secrets.
+- Keep local Qdrant storage, vector databases, virtual environments, and caches out of version control.
+- Rebuild and validate the index after changing ingestion or filtering logic.
+- Use a safe collection-rebuild process: build and validate a replacement before switching away from a working collection.
+
+## Reproducibility
+
+For every experiment, record:
+
+1. Git commit or source revision.
+2. Dataset filename and category counts.
+3. Chat provider, model, and temperature.
+4. Embedding provider, model, and vector dimension.
+5. Retrieval mode, top-k, and relevance threshold.
+6. Chunk size and overlap.
+7. Whether the indexed handbook was sanitized and validated.
+8. Per-question outcomes and aggregate counts.
+9. Complete terminal output and the generated machine-readable report.
+10. Date/time and any deviations from the planned single-variable change.
+
+Local/embedded Qdrant storage may not support simultaneous access from multiple processes. Run ingestion, the API, CLI, and evaluation sequentially against the same local storage directory unless a Qdrant server is configured.
+
+## Current limitations and next steps
+
+This is an evolving research prototype. The following work is required before calling the repository a fully reproducible release:
+
+- Publish and review the complete backend source tree.
+- Verify the exact API routes, request/response schemas, and startup commands against the implementation.
+- Verify the ingestion filter and inspect the final indexed content for staff-only material.
+- Reproduce V3–V6 and final V7 with recorded configurations.
+- Commit the complete V1–V7 terminal log and an evaluation workbook with case-level data, metrics, and observations.
+- Confirm that the README's setup instructions work from a clean clone.
+
+The project should not claim that an experiment passed, that the API is runnable, or that sensitive data is excluded unless the corresponding implementation and evidence are available.
+
+## Project documentation
+
+- [Architecture](docs/architecture.md) — components, ingestion, retrieval, evaluation, and operational considerations.
+- [Experiment plan and historical results](docs/experiments.md) — V1–V7 plan, datasets, metric definitions, historical observations, and reproduction checklist.
+- [Evaluation dataset guide](api/evals/README.md) — JSONL structure, case types, and evaluation conventions.
 
 ## License
 
-No license has been selected yet. Until a license is added, all rights are reserved by the copyright holder by default.
+No license has been selected for this repository yet. Until a license is added, the project remains under the default copyright protections; reuse and redistribution are not granted by an open-source license.
